@@ -1,0 +1,133 @@
+<p align="center">
+  <img src="static/img/logo.svg" width="88" height="88" alt="">
+</p>
+
+<h1 align="center">Transcriber</h1>
+
+<p align="center">
+  Paste a TikTok, Instagram Reels, or YouTube link — get the transcript.<br>
+  Runs entirely on your own machine. Nothing is uploaded anywhere.
+</p>
+
+<p align="center">
+  <img alt="MIT" src="https://img.shields.io/badge/license-MIT-c25b34">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-c25b34">
+</p>
+
+---
+
+## Install
+
+Needs Python 3.10+ and [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`).
+
+```bash
+git clone https://github.com/ishanmalu/Transcriber.git
+cd Transcriber
+./setup.sh
+```
+
+## Run
+
+Double-click **Transcriber.command**, or:
+
+```bash
+./Transcriber.command
+```
+
+It starts a local server and opens <http://127.0.0.1:5005> in your browser. Paste a link, pick how much of it
+you want, hit Transcribe. Lines stream in as they're recognised; then Copy,
+or download `.txt` / `.srt`.
+
+**How much of it?**
+- **Whole video** (default) — no length limit.
+- **First…** — 30s / 1m / 5m / 10m presets, or type any length (`2:30`).
+- **Time range** — from `0:30` to `2:15`. Leave either side blank for
+  "from the start" / "to the end".
+
+**Timestamps** toggle switches between `[0:04] line` and flowing paragraph text.
+You can flip it after a run — it re-renders instantly, no re-transcribing.
+
+**Accuracy**: Best (`large-v3`) / Balanced (`medium`) / Fast (`small`).
+
+**Advanced**: force a language, translate to English, or use your browser login
+for private / login-gated posts.
+
+## Command line
+
+Whole video, with timestamps:
+
+```bash
+./.venv/bin/python transcribe.py "<url>"
+```
+
+| Flag | Does |
+|---|---|
+| `--duration 5:00` | only the first 5 minutes |
+| `--start 0:30 --end 2:15` | a specific window |
+| `--no-timestamps` | plain paragraph text |
+| `--srt` | subtitle format |
+| `--lang hi` / `--translate` | force language / translate to English |
+| `--model small` | faster, less accurate |
+| `-o out.txt` | write to a file |
+
+## Privacy
+
+Audio is downloaded to a temporary folder, transcribed by a local Whisper model,
+and the folder is deleted when the run finishes. No audio, text, or links leave
+your machine — there is no API key and no external service.
+
+Times accept `90`, `1:30`, or `1m30s`.
+
+## Accuracy notes
+
+Uses Whisper `large-v3` by default with VAD silence-filtering and
+`condition_on_previous_text=False` — those two matter a lot for TikTok/Reels,
+where background music and short clips otherwise make Whisper hallucinate
+repeated phrases.
+
+First run of each model downloads it (~1.5 GB for `large-v3`), then it's cached.
+Models are cached in `~/.cache/huggingface` after the first download.
+
+## Speed and length limits
+
+There is no maximum video length. Time is the only real constraint.
+Measured on an M4 / 16 GB, transcription only (add download time):
+
+| | Best (`large-v3`) | Fast (`small`) |
+|---|---|---|
+| speed | 1.8x realtime | 9.5x realtime |
+| 1 min Reel/TikTok | ~35 sec | ~6 sec |
+| 10 min | ~5.5 min | ~1 min |
+| 30 min | ~17 min | ~3 min |
+| 1 hour | ~33 min | ~6.5 min |
+| 3 hours | ~1 hr 40 | ~19 min |
+
+Disk: audio is extracted straight to 16 kHz mono, ~1.9 MB/min, so even a 3-hour
+video is ~340 MB of temp space, deleted automatically when the run finishes.
+RAM: `large-v3` holds ~1.6 GB while running.
+
+One transcription runs at a time; a second request queues behind it.
+
+## Upkeep
+
+TikTok and Instagram change their internals often. If downloads start failing:
+
+```bash
+.venv/bin/pip install -U 'yt-dlp[default,curl-cffi]'
+```
+
+Always include the `[default,curl-cffi]` extra. TikTok rejects requests that don't
+carry a real browser's TLS fingerprint, and `curl_cffi` is what supplies it —
+without it you get an "attempting impersonation, but no impersonate target is
+available" warning followed by a failed download.
+
+## Layout
+
+- `core.py` — download, trim, transcribe. Shared by both front ends.
+- `transcribe.py` — CLI.
+- `app.py` — Flask server (SSE streaming).
+- `static/` — the web UI.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcriber</title>
+<link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="head">
+    <h1><img src="/static/img/logo.svg" alt="" width="34" height="34"> Transcriber</h1>
+    <p class="sub">Paste a TikTok, Reels, or YouTube link. Get the words out.</p>
+  </header>
+
+  <section class="card">
+    <label class="field">
+      <span class="label">Video link</span>
+      <div class="url-row">
+        <input id="url" type="url" placeholder="https://…" autocomplete="off" spellcheck="false">
+        <button id="paste" class="ghost" type="button" title="Paste from clipboard">Paste</button>
+      </div>
+    </label>
+
+    <div id="preview" class="preview" hidden>
+      <img id="pv-thumb" alt="">
+      <div class="pv-meta">
+        <div id="pv-title" class="pv-title"></div>
+        <div id="pv-sub" class="pv-sub"></div>
+      </div>
+    </div>
+
+    <fieldset class="field">
+      <legend class="label">How much of it?</legend>
+      <div class="segmented" role="radiogroup" aria-label="How much of the video">
+        <label><input type="radio" name="range" value="whole" checked><span>Whole video</span></label>
+        <label><input type="radio" name="range" value="first"><span>First…</span></label>
+        <label><input type="radio" name="range" value="range"><span>Time range</span></label>
+      </div>
+
+      <div id="opt-first" class="sub-opt" hidden>
+        <div class="chips" id="dur-chips">
+          <button type="button" data-dur="0:30">30 sec</button>
+          <button type="button" data-dur="1:00">1 min</button>
+          <button type="button" data-dur="5:00">5 min</button>
+          <button type="button" data-dur="10:00">10 min</button>
+        </div>
+        <input id="duration" class="time" type="text" placeholder="or type e.g. 2:30" value="1:00">
+      </div>
+
+      <div id="opt-range" class="sub-opt" hidden>
+        <div class="range-row">
+          <label>From <input id="start" class="time" type="text" placeholder="0:30"></label>
+          <label>To <input id="end" class="time" type="text" placeholder="2:15"></label>
+        </div>
+        <p class="hint">Leave either side blank for “from the start” or “to the end”.</p>
+      </div>
+    </fieldset>
+
+    <div class="field row-between">
+      <div>
+        <span class="label">Timestamps</span>
+        <p class="hint">Off gives you flowing paragraph text.</p>
+      </div>
+      <label class="switch">
+        <input id="timestamps" type="checkbox" checked aria-label="Show timestamps">
+        <span class="track"><span class="thumb"></span></span>
+      </label>
+    </div>
+
+    <label class="field">
+      <span class="label">Accuracy</span>
+      <select id="accuracy">
+        <option value="best" selected>Best — most accurate, slowest</option>
+        <option value="balanced">Balanced</option>
+        <option value="fast">Fast — quick draft</option>
+      </select>
+    </label>
+
+    <details class="advanced">
+      <summary>Advanced</summary>
+      <div class="adv-body">
+        <label class="field">
+          <span class="label">Language</span>
+          <input id="lang" type="text" placeholder="Auto-detect (or type a code like en, hi, es)">
+        </label>
+        <label class="check"><input id="translate" type="checkbox"> Translate to English</label>
+        <label class="field">
+          <span class="label">Use my browser login</span>
+          <select id="cookies">
+            <option value="">Not needed</option>
+            <option value="chrome">Chrome</option>
+            <option value="safari">Safari</option>
+            <option value="firefox">Firefox</option>
+            <option value="edge">Edge</option>
+            <option value="brave">Brave</option>
+          </select>
+          <p class="hint">Needed for private or login-gated posts.</p>
+        </label>
+      </div>
+    </details>
+
+    <button id="go" class="primary">Transcribe</button>
+    <p id="error" class="error" hidden></p>
+  </section>
+
+  <section id="progress" class="card progress" hidden>
+    <div class="prog-head">
+      <span class="spinner" aria-hidden="true"></span>
+      <span id="prog-msg">Starting…</span>
+    </div>
+    <div class="steps">
+      <span class="step" data-step="download">Download</span>
+      <span class="step" data-step="model">Model</span>
+      <span class="step" data-step="transcribe">Transcribe</span>
+      <span class="step" data-step="done">Done</span>
+    </div>
+    <div id="prog-note" class="hint"></div>
+  </section>
+
+  <section id="result" class="card" hidden>
+    <div class="result-head">
+      <div id="stats" class="stats"></div>
+      <div class="actions">
+        <button id="copy" class="ghost" type="button">Copy</button>
+        <button id="dl-txt" class="ghost" type="button">.txt</button>
+        <button id="dl-srt" class="ghost" type="button">.srt</button>
+      </div>
+    </div>
+    <div id="transcript" class="transcript" role="log" aria-live="polite"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

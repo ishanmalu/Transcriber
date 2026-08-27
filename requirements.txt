@@ -1,0 +1,5 @@
+# The curl-cffi extra is required: TikTok rejects requests that lack a real
+# browser's TLS fingerprint, and curl_cffi is what supplies it.
+yt-dlp[default,curl-cffi]>=2026.8.19
+faster-whisper>=1.2.1
+flask>=3.0
