@@ -137,7 +137,15 @@ def api_download(job_id, fmt):
 
 
 if __name__ == "__main__":
-    url = "http://127.0.0.1:5005"
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=5005)
+    ap.add_argument("--no-browser", action="store_true",
+                    help="don't open a browser tab (used when running at login)")
+    opts = ap.parse_args()
+
+    url = f"http://127.0.0.1:{opts.port}"
     print(f"\n  Transcriber running at {url}\n")
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    app.run(port=5005, threaded=True, debug=False)
+    if not opts.no_browser:
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    app.run(port=opts.port, threaded=True, debug=False)

@@ -34,7 +34,19 @@ Double-click **Transcriber.command**, or:
 ./Transcriber.command
 ```
 
-It starts a local server and opens <http://127.0.0.1:5005> in your browser. Paste a link, pick how much of it
+It starts a local server and opens <http://127.0.0.1:5005> in your browser.
+
+### Always-on (optional)
+
+To keep it running in the background so the address is always live — just a
+bookmark, no launching anything:
+
+```bash
+./install-autostart.sh
+```
+
+Then bookmark <http://localhost:5005>. Undo it any time with
+`./uninstall-autostart.sh`. Paste a link, pick how much of it
 you want, hit Transcribe. Lines stream in as they're recognised; then Copy,
 or download `.txt` / `.srt`.
 
