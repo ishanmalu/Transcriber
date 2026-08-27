@@ -36,6 +36,17 @@ Double-click **Transcriber.command**, or:
 
 It starts a local server and opens <http://127.0.0.1:5005> in your browser.
 
+### From your phone or iPad
+
+On the same Wi-Fi, start it with:
+
+```bash
+./.venv/bin/python app.py --host 0.0.0.0
+```
+
+It prints a `http://192.168.x.x:5005` address — open that on your phone.
+Only devices on your network can reach it.
+
 ### Always-on (optional)
 
 To keep it running in the background so the address is always live — just a
@@ -81,6 +92,19 @@ Whole video, with timestamps:
 | `--lang hi` / `--translate` | force language / translate to English |
 | `--model small` | faster, less accurate |
 | `-o out.txt` | write to a file |
+
+## Why there's no hosted version
+
+Transcriber runs on your machine on purpose, not just for privacy:
+
+- **It needs a real server.** GitHub Pages and other static hosts can't run
+  Python or a multi-gigabyte Whisper model, and a browser-only version can't
+  fetch TikTok's media files (CORS).
+- **Datacenter IPs get blocked.** TikTok, Instagram, and YouTube throttle or
+  block cloud provider address ranges. Running from your own connection is the
+  main reason downloads work reliably here.
+- **Speed.** Transcription is CPU-bound. A cheap cloud instance is several times
+  slower than an Apple silicon laptop.
 
 ## Privacy
 

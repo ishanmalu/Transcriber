@@ -140,12 +140,25 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=5005)
+    ap.add_argument("--host", default="127.0.0.1",
+                    help="0.0.0.0 exposes it to your local network (phone, iPad)")
     ap.add_argument("--no-browser", action="store_true",
                     help="don't open a browser tab (used when running at login)")
     opts = ap.parse_args()
 
     url = f"http://127.0.0.1:{opts.port}"
-    print(f"\n  Transcriber running at {url}\n")
+    print(f"\n  Transcriber running at {url}")
+    if opts.host == "0.0.0.0":
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            print(f"  On your network:      http://{s.getsockname()[0]}:{opts.port}")
+        except OSError:
+            pass
+        finally:
+            s.close()
+    print()
     if not opts.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-    app.run(port=opts.port, threaded=True, debug=False)
+    app.run(host=opts.host, port=opts.port, threaded=True, debug=False)
