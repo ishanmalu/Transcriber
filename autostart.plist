@@ -9,6 +9,8 @@
     <string>__DIR__/.venv/bin/python</string>
     <string>__DIR__/app.py</string>
     <string>--no-browser</string>
+    <string>--host</string>
+    <string>__HOST__</string>
   </array>
   <key>WorkingDirectory</key>
   <string>__DIR__</string>

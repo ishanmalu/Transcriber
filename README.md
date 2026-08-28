@@ -47,17 +47,33 @@ On the same Wi-Fi, start it with:
 It prints a `http://192.168.x.x:5005` address — open that on your phone.
 Only devices on your network can reach it.
 
+### From anywhere, with Tailscale
+
+[Tailscale](https://tailscale.com) puts your own devices on a private network,
+so your phone can reach this Mac from anywhere without exposing anything to the
+public internet. With Tailscale installed and logged in on both devices:
+
+```bash
+./.venv/bin/python app.py --host "$(tailscale ip -4 | head -1)"
+```
+
+Then open `http://<your-machine>.<tailnet>.ts.net:5005` on any of your devices.
+Traffic runs inside Tailscale's encrypted tunnel, and because the download still
+happens from your home connection, TikTok and Instagram keep working — which is
+not true of a cloud-hosted deployment.
+
 ### Always-on (optional)
 
 To keep it running in the background so the address is always live — just a
 bookmark, no launching anything:
 
 ```bash
-./install-autostart.sh
+./install-autostart.sh             # this Mac only
+./install-autostart.sh tailscale   # reachable from your other devices
+./install-autostart.sh 0.0.0.0     # reachable on your local network
 ```
 
-Then bookmark <http://localhost:5005>. Undo it any time with
-`./uninstall-autostart.sh`. Paste a link, pick how much of it
+Undo it any time with `./uninstall-autostart.sh`. Paste a link, pick how much of it
 you want, hit Transcribe. Lines stream in as they're recognised; then Copy,
 or download `.txt` / `.srt`.
 
