@@ -258,6 +258,18 @@ MEDIA_FORMATS = ("mp4", "mov", "mp3")
 QUALITIES = (480, 720, 1080)
 
 
+def media_duration(path):
+    """Seconds of actual content in a finished file, or None."""
+    if not FFPROBE:
+        return None
+    r = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "format=duration",
+                        "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    try:
+        return float(r.stdout.strip())
+    except ValueError:
+        return None
+
+
 def video_height(path):
     """Actual height of a finished file, so we can report what was really got."""
     if not FFPROBE:
@@ -322,6 +334,18 @@ def download_media(url, fmt, dest_dir, *, start=None, end=None, quality=1080,
     if not FFMPEG:
         raise TranscribeError("ffmpeg isn't installed. Run: brew install ffmpeg")
 
+    # Probe first: it names the file, and its duration lets us reject an
+    # impossible time range before downloading rather than after.
+    try:
+        info = probe(url, cookies_from_browser) or {}
+    except TranscribeError:
+        info = {}
+    total = info.get("duration")
+    if total and start is not None and start >= total:
+        raise TranscribeError(
+            f"That video is only {fmt_ts(total)} long, so it has nothing at "
+            f"{fmt_ts(start)}. Pick an earlier start.")
+
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="dl-", dir=dest_dir))
@@ -358,38 +382,52 @@ def download_media(url, fmt, dest_dir, *, start=None, end=None, quality=1080,
         raise TranscribeError("The download finished but produced no file.")
     src = max(files, key=lambda p: p.stat().st_size)
 
-    if start or end:
-        on_event(stage="progress", message="Trimming…")
-        trimmed = work / f"trimmed{src.suffix}"
-        cut = [FFMPEG, "-y", "-loglevel", "error"]
-        if start:
-            cut += ["-ss", str(start)]
-        cut += ["-i", str(src)]
-        if end:
-            cut += ["-to", str(end - (start or 0))]
-        # Stream copy keeps it fast; cuts land on the nearest keyframe.
-        cut += ["-c", "copy", str(trimmed)]
-        r = subprocess.run(cut, capture_output=True, text=True)
-        if r.returncode != 0 or not trimmed.exists() or trimmed.stat().st_size < 1000:
-            raise TranscribeError("Couldn't trim that range — check the start and end times.")
-        src = trimmed
+    try:
+        if start or end:
+            on_event(stage="progress", message="Trimming…")
+            trimmed = work / f"trimmed{src.suffix}"
+            cut = [FFMPEG, "-y", "-loglevel", "error"]
+            if start:
+                cut += ["-ss", str(start)]
+            cut += ["-i", str(src)]
+            if end:
+                cut += ["-to", str(end - (start or 0))]
+            # Stream copy keeps it fast; cuts land on the nearest keyframe.
+            cut += ["-c", "copy", str(trimmed)]
+            r = subprocess.run(cut, capture_output=True, text=True)
+            if r.returncode != 0 or not trimmed.exists() or trimmed.stat().st_size < 1000:
+                raise TranscribeError(
+                    "Couldn't trim that range — check the start and end times.")
+            # An -ss past the end doesn't fail: ffmpeg clamps and writes a stub of
+            # a few stray seconds. Compare what came out against what was actually
+            # available so we never hand back a stub as if it were the clip asked for.
+            avail = ((min(end, total) if end else total) - (start or 0)) if total \
+                else ((end - (start or 0)) if end else None)
+            got = media_duration(trimmed)
+            if avail and avail > 0 and got is not None and got < avail * 0.5:
+                raise TranscribeError(
+                    "That time range is past the end of the video, so there was "
+                    "almost nothing to take. Check the start and end times.")
+            src = trimmed
 
-    if fmt == "mov" and src.suffix.lower() != ".mov":
-        on_event(stage="progress", message="Converting to MOV…")
-        mov = work / "out.mov"
-        r = subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(src),
-                            "-c", "copy", str(mov)], capture_output=True, text=True)
-        if r.returncode != 0:
-            raise TranscribeError("Couldn't convert to MOV:\n" + (r.stderr or "")[-400:])
-        src = mov
+        if fmt == "mov" and src.suffix.lower() != ".mov":
+            on_event(stage="progress", message="Converting to MOV…")
+            mov = work / "out.mov"
+            r = subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(src),
+                                "-c", "copy", str(mov)], capture_output=True, text=True)
+            if r.returncode != 0:
+                raise TranscribeError("Couldn't convert to MOV:\n" + (r.stderr or "")[-400:])
+            src = mov
 
-    title = _sanitize((probe(url, cookies_from_browser) or {}).get("title"))
-    final = dest_dir / f"{title}.{fmt}"
-    n = 2
-    while final.exists():
-        final = dest_dir / f"{title} ({n}).{fmt}"
-        n += 1
-    shutil.move(str(src), final)
-    shutil.rmtree(work, ignore_errors=True)
+        title = _sanitize(info.get("title"))
+        final = dest_dir / f"{title}.{fmt}"
+        n = 2
+        while final.exists():
+            final = dest_dir / f"{title} ({n}).{fmt}"
+            n += 1
+        shutil.move(str(src), final)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
     on_event(stage="progress", message="Ready.", percent=100)
     return final

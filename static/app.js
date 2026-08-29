@@ -47,8 +47,6 @@ $('dur-chips').addEventListener('click', (e) => {
   if (!btn) return;
   $('duration').value = btn.dataset.dur;
   markChip();
-syncMode();
-syncRange();
 });
 $('duration').addEventListener('input', markChip);
 function markChip() {
@@ -56,6 +54,11 @@ function markChip() {
     b.classList.toggle('on', b.dataset.dur === $('duration').value.trim()));
 }
 markChip();
+
+// Browsers restore radio state across reloads without re-running scripts, so
+// bring the dependent controls in line with whatever is actually checked.
+syncMode();
+syncRange();
 
 /* ---------- paste + preview ---------- */
 $('paste').addEventListener('click', async () => {
@@ -101,7 +104,9 @@ function hms(s) {
 
 /* ---------- run ---------- */
 $('go').addEventListener('click', start);
-$('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+$('url').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !$('go').disabled) start();
+});
 
 function start() {
   const mode = document.querySelector('input[name=range]:checked').value;
@@ -130,7 +135,6 @@ function start() {
   segments = [];
   $('go').disabled = true;
   $('go').textContent = 'Working…';
-  window.outMode = outMode;
   $('progress').hidden = false;
   $('prog-msg').textContent = 'Starting…';
   $('prog-note').textContent = '';
@@ -215,7 +219,17 @@ function listen(id) {
         break;
     }
   };
-  es.onerror = () => { es.close(); reset(); };
+    es.onerror = () => {
+    es.close();
+    // Only a mid-run drop is a failure; the stream also closes normally
+    // once 'done'/'file'/'error' has already been handled.
+    if (!$('progress').hidden) {
+      fail('Lost the connection to the local server. It may have restarted — '
+           + 'check that it is running, then try again.');
+    } else {
+      reset();
+    }
+  };
 }
 
 function addLine(seg) {

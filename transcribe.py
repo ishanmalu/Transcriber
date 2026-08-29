@@ -34,7 +34,8 @@ def main():
         if args.duration and args.end:
             p.error("use --duration or --end, not both")
         if args.duration:
-            start, end = core.resolve_range("first", duration=args.duration)
+            # --duration is relative to --start, so resolve both here; parse_time
+            # raises on anything unreadable.
             start = core.parse_time(args.start)
             end = (start or 0) + core.parse_time(args.duration)
         elif args.start or args.end:
