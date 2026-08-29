@@ -5,14 +5,15 @@ let segments = [];
 /* ---------- output mode ---------- */
 let fmt = 'mp4';
 let quality = 1080;
-document.querySelectorAll('input[name=mode]').forEach((r) => {
-  r.addEventListener('change', () => {
-    const dl = r.value === 'download';
-    $('opt-format').hidden = !dl;
-    $('transcript-only').hidden = dl;
-    $('go').textContent = dl ? 'Download' : 'Transcribe';
-  });
-});
+function syncMode() {
+  const dl = document.querySelector('input[name=mode]:checked').value === 'download';
+  $('opt-format').hidden = !dl;
+  $('transcript-only').hidden = dl;
+  $('opt-quality').hidden = fmt === 'mp3';
+  $('go').textContent = dl ? 'Download' : 'Transcribe';
+}
+document.querySelectorAll('input[name=mode]').forEach((r) =>
+  r.addEventListener('change', syncMode));
 
 $('fmt-chips').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-fmt]');
@@ -33,18 +34,21 @@ $('q-chips').addEventListener('click', (e) => {
 });
 
 /* ---------- range mode ---------- */
-document.querySelectorAll('input[name=range]').forEach((r) => {
-  r.addEventListener('change', () => {
-    $('opt-first').hidden = r.value !== 'first';
-    $('opt-range').hidden = r.value !== 'range';
-  });
-});
+function syncRange() {
+  const v = document.querySelector('input[name=range]:checked').value;
+  $('opt-first').hidden = v !== 'first';
+  $('opt-range').hidden = v !== 'range';
+}
+document.querySelectorAll('input[name=range]').forEach((r) =>
+  r.addEventListener('change', syncRange));
 
 $('dur-chips').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-dur]');
   if (!btn) return;
   $('duration').value = btn.dataset.dur;
   markChip();
+syncMode();
+syncRange();
 });
 $('duration').addEventListener('input', markChip);
 function markChip() {

@@ -5,16 +5,35 @@
 <h1 align="center">Transcriber</h1>
 
 <p align="center">
-  Paste a TikTok, Instagram Reels, or YouTube link — get the transcript.<br>
+  Paste a TikTok, Instagram Reels, or YouTube link.<br>
+  Get an accurate transcript &mdash; or the video and audio files themselves.<br>
   Runs entirely on your own machine. Nothing is uploaded anywhere.
 </p>
 
 <p align="center">
   <img alt="MIT" src="https://img.shields.io/badge/license-MIT-c25b34">
   <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-c25b34">
+  <img alt="Runs locally" src="https://img.shields.io/badge/runs-100%25%20locally-c25b34">
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/ui-dark.png">
+    <img src="docs/ui-light.png" alt="Transcriber's transcript view" width="620">
+  </picture>
 </p>
 
 ---
+
+## What it does
+
+- **Transcribes** TikTok, Instagram Reels, and YouTube videos with Whisper,
+  running locally &mdash; no API key, no upload, no per-minute billing.
+- **Downloads** the same videos as MP4, MOV, or MP3, at 480p, 720p, or 1080p.
+- **Whole video or any slice** &mdash; the first N minutes, or an arbitrary
+  time range, for both transcripts and downloads.
+- **Timestamps on or off**, toggled after the fact without re-transcribing.
+- **Exports** plain text or SRT subtitles.
 
 ## Install
 
@@ -89,6 +108,13 @@ You can flip it after a run — it re-renders instantly, no re-transcribing.
 **Accuracy**: Best (`large-v3`) / Balanced (`medium`) / Fast (`small`).
 
 ## Downloading the video or audio
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/dl-dark.png">
+    <img src="docs/dl-light.png" alt="Transcriber's download view" width="620">
+  </picture>
+</p>
 
 Switch **What do you want?** to **Download file** and pick a format:
 
