@@ -25,6 +25,19 @@ def _find_ffmpeg():
 
 FFMPEG = _find_ffmpeg()
 
+
+def _find_ffprobe():
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    for c in ("/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "/usr/bin/ffprobe"):
+        if Path(c).is_file():
+            return c
+    return None
+
+
+FFPROBE = _find_ffprobe()
+
 MODELS = {
     "best": "large-v3",
     "balanced": "medium",
@@ -242,6 +255,20 @@ def transcribe(url, *, start=None, end=None, model="large-v3", lang=None,
 
 
 MEDIA_FORMATS = ("mp4", "mov", "mp3")
+QUALITIES = (480, 720, 1080)
+
+
+def video_height(path):
+    """Actual height of a finished file, so we can report what was really got."""
+    if not FFPROBE:
+        return None
+    r = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0",
+                        "-show_entries", "stream=height", "-of", "csv=p=0", str(path)],
+                       capture_output=True, text=True)
+    try:
+        return int(r.stdout.strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
 
 
 def _sanitize(name, fallback="video"):
@@ -275,11 +302,21 @@ def _run_with_progress(cmd, on_event, label="Downloading"):
     return proc.returncode, "".join(tail)
 
 
-def download_media(url, fmt, dest_dir, *, start=None, end=None,
+def download_media(url, fmt, dest_dir, *, start=None, end=None, quality=1080,
                    cookies_from_browser=None, on_event=lambda **k: None):
-    """Download a video/audio file. Returns the finished path."""
+    """Download a video/audio file. Returns the finished path.
+
+    `quality` caps the vertical resolution; the real file may be smaller if the
+    source was never published that large.
+    """
     if fmt not in MEDIA_FORMATS:
         raise TranscribeError(f"Unknown format {fmt!r}.")
+    try:
+        quality = int(quality)
+    except (TypeError, ValueError):
+        raise TranscribeError(f"Unknown quality {quality!r}.")
+    if quality not in QUALITIES:
+        raise TranscribeError(f"Quality must be one of {', '.join(map(str, QUALITIES))}.")
     if not Path(YTDLP).exists():
         raise TranscribeError(f"yt-dlp is missing. Run: {HERE}/.venv/bin/pip install -U yt-dlp")
     if not FFMPEG:
@@ -293,8 +330,14 @@ def download_media(url, fmt, dest_dir, *, start=None, end=None,
     if fmt == "mp3":
         sel = ["-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"]
     else:
-        # Prefer an mp4-compatible pair so the merge doesn't need re-encoding.
-        sel = ["-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+        # Cap the height, preferring an mp4-compatible pair so the merge needs
+        # no re-encoding. Falls back through progressively looser matches, and
+        # finally to "smallest available" if everything exceeds the cap.
+        h = quality
+        sel = ["-f", (f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/"
+                      f"b[height<={h}][ext=mp4]/"
+                      f"bv*[height<={h}]+ba/b[height<={h}]/"
+                      f"wv*+ba/w"),
                "--merge-output-format", "mp4"]
 
     cmd = [YTDLP, *sel, "--no-playlist", "--newline", "-o", str(out), url]

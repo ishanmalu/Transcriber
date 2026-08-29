@@ -77,8 +77,15 @@ def api_start():
 
     mode = data.get("mode", "transcript")
     fmt = data.get("format", "mp4")
-    if mode == "download" and fmt not in core.MEDIA_FORMATS:
-        return jsonify(error=f"Unknown format {fmt}."), 400
+    quality = data.get("quality", 1080)
+    if mode == "download":
+        if fmt not in core.MEDIA_FORMATS:
+            return jsonify(error=f"Unknown format {fmt}."), 400
+        try:
+            if int(quality) not in core.QUALITIES:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify(error="Pick a quality of 480, 720, or 1080."), 400
     model = core.MODELS.get(data.get("accuracy", "best"), "large-v3")
     job_id = uuid.uuid4().hex
     q = queue.Queue()
@@ -95,13 +102,15 @@ def api_start():
             if mode == "download":
                 sweep_downloads()
                 path = core.download_media(
-                    url, fmt, DOWNLOADS, start=start, end=end,
+                    url, fmt, DOWNLOADS, start=start, end=end, quality=quality,
                     cookies_from_browser=(data.get("cookies_from_browser") or None),
                     on_event=lambda **kw: emit(**kw))
                 with JOBS_LOCK:
                     JOBS[job_id]["file"] = str(path)
                 emit(stage="file", name=path.name, format=fmt,
                      size_mb=round(path.stat().st_size / 1e6, 1),
+                     height=(core.video_height(path) if fmt != "mp3" else None),
+                     asked=int(quality) if fmt != "mp3" else None,
                      url=f"/api/file/{job_id}")
                 return
 

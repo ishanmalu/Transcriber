@@ -98,6 +98,10 @@ Switch **What do you want?** to **Download file** and pick a format:
 | **MOV** | same video, remuxed for Final Cut and QuickTime |
 | **MP3** | audio only, highest quality |
 
+Video downloads take a **quality** cap: 480p, 720p, or 1080p (the maximum).
+If the source was never published that large you get the biggest size it does
+have, and the result card tells you what you actually got.
+
 The time-range controls apply here too, so you can pull just a clip. Video trims
 are stream-copied, so they're fast and land on the nearest keyframe.
 

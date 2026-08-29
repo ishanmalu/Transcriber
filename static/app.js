@@ -4,6 +4,7 @@ let segments = [];
 
 /* ---------- output mode ---------- */
 let fmt = 'mp4';
+let quality = 1080;
 document.querySelectorAll('input[name=mode]').forEach((r) => {
   r.addEventListener('change', () => {
     const dl = r.value === 'download';
@@ -18,6 +19,16 @@ $('fmt-chips').addEventListener('click', (e) => {
   if (!btn) return;
   fmt = btn.dataset.fmt;
   document.querySelectorAll('#fmt-chips button').forEach((b) =>
+    b.classList.toggle('on', b === btn));
+  // resolution is meaningless for audio-only output
+  $('opt-quality').hidden = fmt === 'mp3';
+});
+
+$('q-chips').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-q]');
+  if (!btn) return;
+  quality = Number(btn.dataset.q);
+  document.querySelectorAll('#q-chips button').forEach((b) =>
     b.classList.toggle('on', b === btn));
 });
 
@@ -95,6 +106,7 @@ function start() {
     url: $('url').value.trim(),
     mode: outMode,
     format: fmt,
+    quality: quality,
     range_mode: mode,
     duration: $('duration').value.trim(),
     start: $('start').value.trim(),
@@ -165,7 +177,16 @@ function listen(id) {
         es.close();
         $('progress').hidden = true;
         $('file-name').textContent = d.name;
-        $('file-sub').textContent = `${d.format.toUpperCase()} · ${d.size_mb} MB`;
+        {
+          const bits = [d.format.toUpperCase()];
+          if (d.height) {
+            bits.push(`${d.height}p`);
+            // the source may simply never have been published at the size asked for
+            if (d.asked && d.height < d.asked) bits.push(`${d.asked}p not available`);
+          }
+          bits.push(`${d.size_mb} MB`);
+          $('file-sub').textContent = bits.join(' · ');
+        }
         $('file-save').href = d.url;
         $('file-result').hidden = false;
         reset();
