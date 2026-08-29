@@ -32,6 +32,21 @@
     </div>
 
     <fieldset class="field">
+      <legend class="label">What do you want?</legend>
+      <div class="segmented" role="radiogroup" aria-label="Output type">
+        <label><input type="radio" name="mode" value="transcript" checked><span>Transcript</span></label>
+        <label><input type="radio" name="mode" value="download"><span>Download file</span></label>
+      </div>
+      <div id="opt-format" class="sub-opt" hidden>
+        <div class="chips" id="fmt-chips">
+          <button type="button" data-fmt="mp4" class="on">MP4 &middot; video</button>
+          <button type="button" data-fmt="mov">MOV &middot; video</button>
+          <button type="button" data-fmt="mp3">MP3 &middot; audio</button>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset class="field">
       <legend class="label">How much of it?</legend>
       <div class="segmented" role="radiogroup" aria-label="How much of the video">
         <label><input type="radio" name="range" value="whole" checked><span>Whole video</span></label>
@@ -58,6 +73,7 @@
       </div>
     </fieldset>
 
+    <div id="transcript-only">
     <div class="field row-between">
       <div>
         <span class="label">Timestamps</span>
@@ -77,6 +93,8 @@
         <option value="fast">Fast — quick draft</option>
       </select>
     </label>
+
+    </div><!-- /transcript-only -->
 
     <details class="advanced">
       <summary>Advanced</summary>
@@ -110,6 +128,7 @@
       <span class="spinner" aria-hidden="true"></span>
       <span id="prog-msg">Starting…</span>
     </div>
+    <div id="bar-wrap" class="bar-wrap" hidden><div id="bar" class="bar"></div></div>
     <div class="steps">
       <span class="step" data-step="download">Download</span>
       <span class="step" data-step="model">Model</span>
@@ -117,6 +136,15 @@
       <span class="step" data-step="done">Done</span>
     </div>
     <div id="prog-note" class="hint"></div>
+  </section>
+
+  <section id="file-result" class="card file-result" hidden>
+    <div class="file-icon" aria-hidden="true">↓</div>
+    <div class="file-meta">
+      <div id="file-name" class="file-name"></div>
+      <div id="file-sub" class="pv-sub"></div>
+    </div>
+    <a id="file-save" class="primary save" href="#" download>Save file</a>
   </section>
 
   <section id="result" class="card" hidden>

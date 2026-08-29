@@ -88,6 +88,22 @@ You can flip it after a run — it re-renders instantly, no re-transcribing.
 
 **Accuracy**: Best (`large-v3`) / Balanced (`medium`) / Fast (`small`).
 
+## Downloading the video or audio
+
+Switch **What do you want?** to **Download file** and pick a format:
+
+| | |
+|---|---|
+| **MP4** | video, merged from the best available streams |
+| **MOV** | same video, remuxed for Final Cut and QuickTime |
+| **MP3** | audio only, highest quality |
+
+The time-range controls apply here too, so you can pull just a clip. Video trims
+are stream-copied, so they're fast and land on the nearest keyframe.
+
+Finished files land in `downloads/` and are cleaned up after 24 hours — save
+anything you want to keep. Please respect the copyright of what you download.
+
 **Advanced**: force a language, translate to English, or use your browser login
 for private / login-gated posts.
 

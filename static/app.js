@@ -2,6 +2,25 @@ const $ = (id) => document.getElementById(id);
 let jobId = null;
 let segments = [];
 
+/* ---------- output mode ---------- */
+let fmt = 'mp4';
+document.querySelectorAll('input[name=mode]').forEach((r) => {
+  r.addEventListener('change', () => {
+    const dl = r.value === 'download';
+    $('opt-format').hidden = !dl;
+    $('transcript-only').hidden = dl;
+    $('go').textContent = dl ? 'Download' : 'Transcribe';
+  });
+});
+
+$('fmt-chips').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-fmt]');
+  if (!btn) return;
+  fmt = btn.dataset.fmt;
+  document.querySelectorAll('#fmt-chips button').forEach((b) =>
+    b.classList.toggle('on', b === btn));
+});
+
 /* ---------- range mode ---------- */
 document.querySelectorAll('input[name=range]').forEach((r) => {
   r.addEventListener('change', () => {
@@ -71,8 +90,11 @@ $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); })
 
 function start() {
   const mode = document.querySelector('input[name=range]:checked').value;
+  const outMode = document.querySelector('input[name=mode]:checked').value;
   const body = {
     url: $('url').value.trim(),
+    mode: outMode,
+    format: fmt,
     range_mode: mode,
     duration: $('duration').value.trim(),
     start: $('start').value.trim(),
@@ -85,10 +107,14 @@ function start() {
 
   $('error').hidden = true;
   $('result').hidden = true;
+  $('file-result').hidden = true;
+  $('bar-wrap').hidden = true;
+  $('bar').style.width = '0%';
   $('transcript').innerHTML = '';
   segments = [];
   $('go').disabled = true;
   $('go').textContent = 'Working…';
+  window.outMode = outMode;
   $('progress').hidden = false;
   $('prog-msg').textContent = 'Starting…';
   $('prog-note').textContent = '';
@@ -126,6 +152,23 @@ function listen(id) {
         } else if (d.stage === 'transcribe') {
           $('prog-note').textContent = 'Lines appear below as they are recognised.';
         }
+        break;
+      case 'progress':
+        if (d.message) $('prog-msg').textContent = d.message;
+        setStep('download');
+        if (typeof d.percent === 'number') {
+          $('bar-wrap').hidden = false;
+          $('bar').style.width = d.percent + '%';
+        }
+        break;
+      case 'file':
+        es.close();
+        $('progress').hidden = true;
+        $('file-name').textContent = d.name;
+        $('file-sub').textContent = `${d.format.toUpperCase()} · ${d.size_mb} MB`;
+        $('file-save').href = d.url;
+        $('file-result').hidden = false;
+        reset();
         break;
       case 'language':
         $('prog-note').textContent =
@@ -195,7 +238,9 @@ function fail(msg) {
 
 function reset() {
   $('go').disabled = false;
-  $('go').textContent = 'Transcribe';
+  $('go').textContent =
+    document.querySelector('input[name=mode]:checked').value === 'download'
+      ? 'Download' : 'Transcribe';
 }
 
 const ORDER = ['download', 'model', 'transcribe', 'done'];

@@ -10,6 +10,21 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 YTDLP = str(HERE / ".venv" / "bin" / "yt-dlp")
 
+
+def _find_ffmpeg():
+    """launchd and cron run with a minimal PATH that misses Homebrew, so look
+    in the usual places before giving up."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    for c in ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"):
+        if Path(c).is_file():
+            return c
+    return None
+
+
+FFMPEG = _find_ffmpeg()
+
 MODELS = {
     "best": "large-v3",
     "balanced": "medium",
@@ -114,6 +129,8 @@ def download_audio(url, workdir, cookies_from_browser=None):
     cmd = [YTDLP, "-f", "bestaudio/best", "-x", "--audio-format", "wav",
            "--postprocessor-args", "ExtractAudio:-ac 1 -ar 16000",
            "--no-playlist", "-o", str(out), url]
+    if FFMPEG:
+        cmd += ["--ffmpeg-location", FFMPEG]
     if cookies_from_browser:
         cmd += ["--cookies-from-browser", cookies_from_browser]
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -127,10 +144,10 @@ def download_audio(url, workdir, cookies_from_browser=None):
 
 def clip(src, start, end, workdir):
     """Trim with ffmpeg, down to the 16 kHz mono wav Whisper wants."""
-    if not shutil.which("ffmpeg"):
+    if not FFMPEG:
         raise TranscribeError("ffmpeg isn't installed. Run: brew install ffmpeg")
     dst = workdir / "clip.wav"
-    cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+    cmd = [FFMPEG, "-y", "-loglevel", "error"]
     if start:
         cmd += ["-ss", str(start)]
     cmd += ["-i", str(src)]
@@ -222,3 +239,114 @@ def transcribe(url, *, start=None, end=None, model="large-v3", lang=None,
                 "No speech found in that audio — it may be music-only, or the time "
                 "range may cover a silent part.")
         return collected, info
+
+
+MEDIA_FORMATS = ("mp4", "mov", "mp3")
+
+
+def _sanitize(name, fallback="video"):
+    name = re.sub(r'[/\\:*?"<>|\x00-\x1f]', "", (name or "").strip())
+    name = re.sub(r"\s+", " ", name)[:120].strip(" .")
+    return name or fallback
+
+
+def _run_with_progress(cmd, on_event, label="Downloading"):
+    """Stream yt-dlp/ffmpeg output, reporting percentages as they appear."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, bufsize=1)
+    tail = []
+    pct_re = re.compile(r"\[download\]\s+([\d.]+)%")
+    last = -1.0
+    for line in proc.stdout:
+        tail.append(line)
+        del tail[:-40]
+        m = pct_re.search(line)
+        if m:
+            pct = float(m.group(1))
+            if pct - last >= 1.0 or pct >= 100:
+                last = pct
+                on_event(stage="progress", percent=round(pct, 1),
+                         message=f"{label}… {pct:.0f}%")
+        elif "[Merger]" in line or "Merging" in line:
+            on_event(stage="progress", message="Merging video and audio…")
+        elif "[ExtractAudio]" in line:
+            on_event(stage="progress", message="Extracting audio…")
+    proc.wait()
+    return proc.returncode, "".join(tail)
+
+
+def download_media(url, fmt, dest_dir, *, start=None, end=None,
+                   cookies_from_browser=None, on_event=lambda **k: None):
+    """Download a video/audio file. Returns the finished path."""
+    if fmt not in MEDIA_FORMATS:
+        raise TranscribeError(f"Unknown format {fmt!r}.")
+    if not Path(YTDLP).exists():
+        raise TranscribeError(f"yt-dlp is missing. Run: {HERE}/.venv/bin/pip install -U yt-dlp")
+    if not FFMPEG:
+        raise TranscribeError("ffmpeg isn't installed. Run: brew install ffmpeg")
+
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="dl-", dir=dest_dir))
+    out = work / "media.%(ext)s"
+
+    if fmt == "mp3":
+        sel = ["-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"]
+    else:
+        # Prefer an mp4-compatible pair so the merge doesn't need re-encoding.
+        sel = ["-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b",
+               "--merge-output-format", "mp4"]
+
+    cmd = [YTDLP, *sel, "--no-playlist", "--newline", "-o", str(out), url]
+    if FFMPEG:
+        cmd += ["--ffmpeg-location", FFMPEG]
+    if cookies_from_browser:
+        cmd += ["--cookies-from-browser", cookies_from_browser]
+
+    on_event(stage="progress", message="Starting download…")
+    code, log = _run_with_progress(cmd, on_event)
+    if code != 0:
+        shutil.rmtree(work, ignore_errors=True)
+        raise TranscribeError(_friendly_ytdlp_error(log))
+
+    files = [p for p in work.iterdir() if p.is_file()]
+    if not files:
+        shutil.rmtree(work, ignore_errors=True)
+        raise TranscribeError("The download finished but produced no file.")
+    src = max(files, key=lambda p: p.stat().st_size)
+
+    if start or end:
+        on_event(stage="progress", message="Trimming…")
+        trimmed = work / f"trimmed{src.suffix}"
+        cut = [FFMPEG, "-y", "-loglevel", "error"]
+        if start:
+            cut += ["-ss", str(start)]
+        cut += ["-i", str(src)]
+        if end:
+            cut += ["-to", str(end - (start or 0))]
+        # Stream copy keeps it fast; cuts land on the nearest keyframe.
+        cut += ["-c", "copy", str(trimmed)]
+        r = subprocess.run(cut, capture_output=True, text=True)
+        if r.returncode != 0 or not trimmed.exists() or trimmed.stat().st_size < 1000:
+            raise TranscribeError("Couldn't trim that range — check the start and end times.")
+        src = trimmed
+
+    if fmt == "mov" and src.suffix.lower() != ".mov":
+        on_event(stage="progress", message="Converting to MOV…")
+        mov = work / "out.mov"
+        r = subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(src),
+                            "-c", "copy", str(mov)], capture_output=True, text=True)
+        if r.returncode != 0:
+            raise TranscribeError("Couldn't convert to MOV:\n" + (r.stderr or "")[-400:])
+        src = mov
+
+    title = _sanitize((probe(url, cookies_from_browser) or {}).get("title"))
+    final = dest_dir / f"{title}.{fmt}"
+    n = 2
+    while final.exists():
+        final = dest_dir / f"{title} ({n}).{fmt}"
+        n += 1
+    shutil.move(str(src), final)
+    shutil.rmtree(work, ignore_errors=True)
+    on_event(stage="progress", message="Ready.", percent=100)
+    return final

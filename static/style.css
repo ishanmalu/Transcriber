@@ -162,3 +162,18 @@ input:focus, select:focus { border-color: var(--accent); }
 .line { display: flex; gap: 12px; padding: 3px 0; }
 .line time { flex: none; color: var(--accent); font-variant-numeric: tabular-nums;
   font-size: 12.5px; padding-top: 3px; font-family: ui-monospace, SFMono-Regular, monospace; }
+
+.bar-wrap { height: 6px; margin-top: 12px; background: var(--field);
+  border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.bar { height: 100%; width: 0; background: var(--accent); border-radius: 999px;
+  transition: width .25s ease; }
+
+.file-result { display: flex; align-items: center; gap: 14px; }
+.file-icon { flex: none; width: 42px; height: 42px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 20px; font-weight: 700;
+  background: var(--accent); color: var(--accent-ink); }
+.file-meta { flex: 1; min-width: 0; }
+.file-name { font-weight: 600; font-size: 14px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.primary.save { width: auto; margin: 0; flex: none; padding: 10px 18px;
+  text-decoration: none; display: inline-block; }

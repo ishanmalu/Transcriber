@@ -2,6 +2,8 @@
 """Local web UI for the transcriber. Run:  .venv/bin/python app.py"""
 import json
 import queue
+import shutil
+import time
 import threading
 import traceback
 import uuid
@@ -17,9 +19,24 @@ app = Flask(__name__, static_folder=None)
 
 JOBS = {}          # id -> {"q": Queue, "segments": [...], "done": bool}
 MAX_JOBS = 20      # transcripts are kept for download; drop the oldest beyond this
+DOWNLOADS = HERE / "downloads"
+KEEP_FILES_HOURS = 24
 JOBS_LOCK = threading.Lock()
 # Only one transcription at a time: the models are CPU-bound and memory-hungry.
 RUN_LOCK = threading.Lock()
+
+
+def sweep_downloads():
+    """Downloaded media is the user's to keep, but not forever in our folder."""
+    cutoff = time.time() - KEEP_FILES_HOURS * 3600
+    if not DOWNLOADS.exists():
+        return
+    for p in DOWNLOADS.iterdir():
+        try:
+            if p.stat().st_mtime < cutoff:
+                shutil.rmtree(p) if p.is_dir() else p.unlink()
+        except OSError:
+            pass
 
 
 @app.get("/")
@@ -58,11 +75,15 @@ def api_start():
     except core.TranscribeError as e:
         return jsonify(error=str(e)), 400
 
+    mode = data.get("mode", "transcript")
+    fmt = data.get("format", "mp4")
+    if mode == "download" and fmt not in core.MEDIA_FORMATS:
+        return jsonify(error=f"Unknown format {fmt}."), 400
     model = core.MODELS.get(data.get("accuracy", "best"), "large-v3")
     job_id = uuid.uuid4().hex
     q = queue.Queue()
     with JOBS_LOCK:
-        JOBS[job_id] = {"q": q, "segments": [], "done": False}
+        JOBS[job_id] = {"q": q, "segments": [], "done": False, "file": None}
         for stale in [k for k, v in list(JOBS.items())[:-MAX_JOBS] if v["done"]]:
             JOBS.pop(stale, None)
 
@@ -71,6 +92,19 @@ def api_start():
 
     def work():
         try:
+            if mode == "download":
+                sweep_downloads()
+                path = core.download_media(
+                    url, fmt, DOWNLOADS, start=start, end=end,
+                    cookies_from_browser=(data.get("cookies_from_browser") or None),
+                    on_event=lambda **kw: emit(**kw))
+                with JOBS_LOCK:
+                    JOBS[job_id]["file"] = str(path)
+                emit(stage="file", name=path.name, format=fmt,
+                     size_mb=round(path.stat().st_size / 1e6, 1),
+                     url=f"/api/file/{job_id}")
+                return
+
             if RUN_LOCK.locked():
                 emit(stage="status", message="Waiting for the current transcription to finish…")
             with RUN_LOCK:
@@ -114,6 +148,18 @@ def api_stream(job_id):
 
     return Response(gen(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/file/<job_id>")
+def api_file(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or not job.get("file"):
+        return jsonify(error="That file is no longer available."), 404
+    path = Path(job["file"])
+    if not path.exists():
+        return jsonify(error="That file has been cleaned up. Download it again."), 404
+    return send_from_directory(path.parent, path.name, as_attachment=True)
 
 
 @app.get("/api/download/<job_id>.<fmt>")

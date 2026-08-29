@@ -5,3 +5,4 @@ __pycache__/
 *.srt
 transcript.txt
 .DS_Store
+downloads/
