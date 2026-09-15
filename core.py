@@ -97,7 +97,13 @@ def probe(url, cookies_from_browser=None):
     cmd = [YTDLP, "--no-playlist", "--skip-download", "--dump-single-json", url]
     if cookies_from_browser:
         cmd += ["--cookies-from-browser", cookies_from_browser]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    # probe() runs inline on the web request, so an unreachable site must fail
+    # rather than hold the thread open indefinitely. The media downloads below
+    # are deliberately left unbounded -- a long video legitimately takes a while.
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        raise TranscribeError("Timed out looking that video up. Check the link and your connection.")
     if proc.returncode != 0:
         raise TranscribeError(_friendly_ytdlp_error(proc.stderr or proc.stdout))
     try:
@@ -152,6 +158,13 @@ def download_audio(url, workdir, cookies_from_browser=None):
     files = sorted(workdir.glob("audio.*"))
     if not files:
         raise TranscribeError("The download finished but produced no audio.")
+    # yt-dlp normally removes the intermediate it extracted from, but if one is
+    # left behind, sorting by name can hand back audio.m4a instead of the
+    # 16 kHz mono wav we asked for -- and Whisper would then transcribe the
+    # wrong file at the wrong sample rate. Prefer the wav whenever it exists.
+    for f in files:
+        if f.suffix.lower() == ".wav":
+            return f
     return files[0]
 
 
@@ -262,8 +275,12 @@ def media_duration(path):
     """Seconds of actual content in a finished file, or None."""
     if not FFPROBE:
         return None
-    r = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "format=duration",
-                        "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+    try:
+        r = subprocess.run([FFPROBE, "-v", "error", "-show_entries", "format=duration",
+                            "-of", "csv=p=0", str(path)],
+                           capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return None
     try:
         return float(r.stdout.strip())
     except ValueError:
@@ -274,9 +291,12 @@ def video_height(path):
     """Actual height of a finished file, so we can report what was really got."""
     if not FFPROBE:
         return None
-    r = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0",
-                        "-show_entries", "stream=height", "-of", "csv=p=0", str(path)],
-                       capture_output=True, text=True)
+    try:
+        r = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=height", "-of", "csv=p=0", str(path)],
+                           capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return None
     try:
         return int(r.stdout.strip().splitlines()[0])
     except (ValueError, IndexError):
@@ -410,20 +430,35 @@ def download_media(url, fmt, dest_dir, *, start=None, end=None, quality=1080,
                     "almost nothing to take. Check the start and end times.")
             src = trimmed
 
-        if fmt == "mov" and src.suffix.lower() != ".mov":
-            on_event(stage="progress", message="Converting to MOV…")
-            mov = work / "out.mov"
+        # The format selector falls back to "whatever exists" when nothing meets
+        # the height cap, and --merge-output-format only applies when two streams
+        # are actually merged. So a single progressive WebM can arrive here while
+        # the user asked for MP4. Naming that file .mp4 produces something
+        # QuickTime and Photos refuse to open, which looks like a corrupt
+        # download rather than the container mismatch it is. Remux instead.
+        want = f".{fmt}"
+        if fmt != "mp3" and src.suffix.lower() != want:
+            on_event(stage="progress", message=f"Converting to {fmt.upper()}…")
+            conv = work / f"out{want}"
             r = subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", str(src),
-                                "-c", "copy", str(mov)], capture_output=True, text=True)
-            if r.returncode != 0:
-                raise TranscribeError("Couldn't convert to MOV:\n" + (r.stderr or "")[-400:])
-            src = mov
+                                "-c", "copy", str(conv)], capture_output=True, text=True)
+            if r.returncode == 0 and conv.exists() and conv.stat().st_size > 1000:
+                src = conv
+            else:
+                # Stream copy fails when the codecs can't live in the target
+                # container (VP9/Opus in MP4, say). Re-encoding a whole video
+                # silently would be a nasty surprise on a long one, so keep the
+                # file honest and let its real extension say what it is.
+                on_event(stage="progress",
+                         message=f"Keeping {src.suffix.lstrip('.').upper()} — "
+                                 f"this video isn't available in {fmt.upper()}.")
 
+        ext = src.suffix.lower().lstrip(".") or fmt
         title = _sanitize(info.get("title"))
-        final = dest_dir / f"{title}.{fmt}"
+        final = dest_dir / f"{title}.{ext}"
         n = 2
         while final.exists():
-            final = dest_dir / f"{title} ({n}).{fmt}"
+            final = dest_dir / f"{title} ({n}).{ext}"
             n += 1
         shutil.move(str(src), final)
     finally:

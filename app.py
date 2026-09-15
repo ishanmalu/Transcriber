@@ -107,7 +107,10 @@ def api_start():
                     on_event=lambda **kw: emit(**kw))
                 with JOBS_LOCK:
                     JOBS[job_id]["file"] = str(path)
-                emit(stage="file", name=path.name, format=fmt,
+                # core may keep the source container when a remux isn't possible,
+                # so report what the file really is rather than what was asked for.
+                emit(stage="file", name=path.name,
+                     format=(path.suffix.lstrip(".").lower() or fmt),
                      size_mb=round(path.stat().st_size / 1e6, 1),
                      height=(core.video_height(path) if fmt != "mp3" else None),
                      asked=int(quality) if fmt != "mp3" else None,
@@ -152,6 +155,11 @@ def api_stream(job_id):
         while True:
             item = job["q"].get()
             if item is None:
+                # The sentinel is consumed by whoever reads it, so put it back:
+                # EventSource reconnects on its own, and a second reader landing
+                # on a finished job would otherwise block on an empty queue for
+                # the life of the process, holding a request thread with it.
+                job["q"].put(None)
                 break
             yield f"data: {json.dumps(item)}\n\n"
 
