@@ -60,13 +60,58 @@ markChip();
 syncMode();
 syncRange();
 
+/* ---------- clipboard ---------- */
+// navigator.clipboard only exists in a secure context (https or localhost), so
+// over plain http on the tailnet it is simply undefined. Fall back to the old
+// execCommand path, which still works on an insecure origin.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through: denied permission looks the same as no API at all.
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  // Off-screen but still focusable; display:none or hidden would not be.
+  ta.setAttribute('style', 'position:fixed;top:0;left:-9999px;opacity:0');
+  ta.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.setSelectionRange(0, ta.value.length); // iOS Safari ignores select()
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  return ok;
+}
+
+function flash(btn, msg, label) {
+  btn.textContent = msg;
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = label;
+    btn.disabled = false;
+  }, 1400);
+}
+
 /* ---------- paste + preview ---------- */
 $('paste').addEventListener('click', async () => {
+  // There is no insecure-origin fallback for *reading* the clipboard, so when
+  // it is unavailable, hand the field over for a manual paste instead.
   try {
+    if (!navigator.clipboard?.readText) throw new Error('no clipboard read');
     $('url').value = (await navigator.clipboard.readText()).trim();
     probe();
   } catch {
     $('url').focus();
+    $('url').select();
+    flash($('paste'), 'Paste here \u2192', 'Paste');
   }
 });
 $('url').addEventListener('change', probe);
@@ -294,12 +339,23 @@ function setStep(stage) {
 
 /* ---------- output ---------- */
 $('copy').addEventListener('click', async () => {
+  if (!segments.length) return;
   const text = $('timestamps').checked
     ? segments.map((s) => `[${hms(s.start)}] ${s.text}`).join('\n')
     : segments.map((s) => s.text).join(' ');
-  await navigator.clipboard.writeText(text);
-  $('copy').textContent = 'Copied';
-  setTimeout(() => ($('copy').textContent = 'Copy'), 1200);
+  // Selecting the transcript first means that even if both clipboard paths
+  // fail, the text is sitting there ready for a manual copy.
+  const ok = await copyText(text);
+  if (ok) {
+    flash($('copy'), 'Copied', 'Copy');
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents($('transcript'));
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  flash($('copy'), 'Selected \u2014 copy it', 'Copy');
 });
 $('dl-txt').addEventListener('click', () => {
   window.location = `/api/download/${jobId}.${$('timestamps').checked ? 'stamped' : 'txt'}`;

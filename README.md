@@ -70,13 +70,26 @@ Only devices on your network can reach it.
 
 [Tailscale](https://tailscale.com) puts your own devices on a private network,
 so your phone can reach this Mac from anywhere without exposing anything to the
-public internet. With Tailscale installed and logged in on both devices:
+public internet. With Tailscale installed and logged in on both devices, let
+Tailscale terminate HTTPS and proxy to the app on localhost:
 
 ```bash
-./.venv/bin/python app.py --host "$(tailscale ip -4 | head -1)"
+./.venv/bin/python app.py          # stays on 127.0.0.1
+tailscale serve --bg 5005          # in another shell
 ```
 
-Then open `http://<your-machine>.<tailnet>.ts.net:5005` on any of your devices.
+That prints an `https://<your-machine>.<tailnet>.ts.net` address — open it on
+any of your devices. It is tailnet-only: `serve` is not `funnel`, so nothing is
+published to the public internet. Turn it off with `tailscale serve --https=443 off`.
+
+**Use HTTPS, not the raw `http://100.x.y.z:5005` address.** Browsers expose the
+clipboard API only in a secure context, which means HTTPS or `localhost`. Over
+plain HTTP to a tailnet IP, `navigator.clipboard` is simply undefined, so the
+Copy button falls back to a deprecated path and Paste cannot read the clipboard
+at all. Going through `tailscale serve` gets you a real certificate and both
+buttons work properly. It is also tighter: the app keeps listening only on
+`127.0.0.1`, so the proxy is the single way in.
+
 Traffic runs inside Tailscale's encrypted tunnel, and because the download still
 happens from your home connection, TikTok and Instagram keep working — which is
 not true of a cloud-hosted deployment.
@@ -87,10 +100,17 @@ To keep it running in the background so the address is always live — just a
 bookmark, no launching anything:
 
 ```bash
-./install-autostart.sh             # this Mac only
-./install-autostart.sh tailscale   # reachable from your other devices
+./install-autostart.sh             # this Mac only, or behind `tailscale serve`
+./install-autostart.sh tailscale   # bind the tailnet IP directly (plain HTTP)
 ./install-autostart.sh 0.0.0.0     # reachable on your local network
 ```
+
+For remote access, prefer the plain `./install-autostart.sh` paired with
+`tailscale serve --bg 5005`: the agent keeps the app on `127.0.0.1` and Tailscale
+supplies HTTPS. The `tailscale` argument binds the tailnet IP over plain HTTP
+instead, which breaks the clipboard buttons as described above. The `serve`
+config persists across restarts, so both survive a reboot — provided Tailscale
+itself is set to run at login.
 
 Undo it any time with `./uninstall-autostart.sh`. Paste a link, pick how much of it
 you want, hit Transcribe. Lines stream in as they're recognised; then Copy,
